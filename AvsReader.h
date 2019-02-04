@@ -49,6 +49,10 @@ class AvsReader {
     VideoInfo viAVS;
     VSVideoInfo vi[2];
     int numOutputs;
+    struct {
+        int n;
+        VSFrameRef* dsts[2];
+    } last_frame;
 
     void (__stdcall *write_frame)(
         VSFrameRef** dst, PVideoFrame& src, int num_planes, const VSAPI* api);
@@ -58,6 +62,7 @@ class AvsReader {
 
 public:
     ~AvsReader();
+    void cleanup(const VSAPI* api);
     const VSFrameRef* __stdcall getFrame(int n, VSCore* core, const VSAPI* api,
                                          VSFrameContext* ctx);
     const VSVideoInfo* getVSVideoInfo() { return vi; }

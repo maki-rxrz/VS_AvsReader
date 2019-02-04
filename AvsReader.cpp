@@ -159,6 +159,13 @@ AvsReader::~AvsReader()
 }
 
 
+void AvsReader::cleanup(const VSAPI* api)
+{
+    api->freeFrame(last_frame.dsts[0]);
+    api->freeFrame(last_frame.dsts[1]);
+}
+
+
 AvsReader::AvsReader(HMODULE d, ise_t* e, PClip c, int n, int bit_depth,
                      VSCore* core, const VSAPI* api) :
     dll(d), env(e), clip(c), numOutputs(n)
@@ -183,6 +190,10 @@ AvsReader::AvsReader(HMODULE d, ise_t* e, PClip c, int n, int bit_depth,
     } else {
         write_frame = write_yuv;
     }
+
+    last_frame.n = -1;
+    last_frame.dsts[0] = nullptr;
+    last_frame.dsts[1] = nullptr;
 }
 
 
@@ -191,32 +202,39 @@ getFrame(int n, VSCore* core, const VSAPI* api, VSFrameContext* ctx)
 {
     n = std::min(std::max(n, 0), viAVS.num_frames - 1);
 
-    VSFrameRef* dsts[2] = {
-        api->newVideoFrame(vi[0].format, vi[0].width, vi[0].height, nullptr,
-                           core),
-        nullptr
-    };
+    if (n != last_frame.n) {
+        VSFrameRef* dsts[2] = {
+            api->newVideoFrame(vi[0].format, vi[0].width, vi[0].height, nullptr, 
+                               core),
+            nullptr
+        };
 
-    VSMap *props = api->getFramePropsRW(dsts[0]);
-    api->propSetInt(props, "_DurationNum", viAVS.fps_denominator, paReplace);
-    api->propSetInt(props, "_DurationDen", viAVS.fps_numerator, paReplace);
+        VSMap *props = api->getFramePropsRW(dsts[0]);
+        api->propSetInt(props, "_DurationNum", viAVS.fps_denominator, paReplace);
+        api->propSetInt(props, "_DurationDen", viAVS.fps_numerator, paReplace);
 
-    PVideoFrame src = clip->GetFrame(n, env);
+        PVideoFrame src = clip->GetFrame(n, env);
 
-    if (numOutputs == 1) {
-        write_frame(dsts, src, vi[0].format->numPlanes, api);
-        return dsts[0];
+        if (numOutputs == 1) {
+            write_frame(dsts, src, vi[0].format->numPlanes, api);
+        } else {
+            dsts[1] = api->newVideoFrame(vi[1].format, vi[1].width, vi[1].height,
+                                        nullptr, core);
+            props = api->getFramePropsRW(dsts[1]);
+            api->propSetInt(props, "_DurationNum", viAVS.fps_denominator, paReplace);
+            api->propSetInt(props, "_DurationDen", viAVS.fps_numerator, paReplace);
+
+            write_frame(dsts, src, 1, api);
+        }
+
+        api->freeFrame(last_frame.dsts[0]);
+        api->freeFrame(last_frame.dsts[1]);
+        last_frame.n = n;
+        last_frame.dsts[0] = dsts[0];
+        last_frame.dsts[1] = dsts[1];
     }
 
-    dsts[1] = api->newVideoFrame(vi[1].format, vi[1].width, vi[1].height,
-                                nullptr, core);
-    props = api->getFramePropsRW(dsts[1]);
-    api->propSetInt(props, "_DurationNum", viAVS.fps_denominator, paReplace);
-    api->propSetInt(props, "_DurationDen", viAVS.fps_numerator, paReplace);
-
-    write_frame(dsts, src, 1, api);
-
-    return api->cloneFrameRef(dsts[api->getOutputIndex(ctx)]);
+    return api->cloneFrameRef(last_frame.dsts[api->getOutputIndex(ctx)]);
 }
 
 

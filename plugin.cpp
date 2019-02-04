@@ -46,9 +46,11 @@ get_frame(int n, int activation_reason, void **instance_data, void **,
 
 
 static void VS_CC
-free_filter(void* instance_data, VSCore*, const VSAPI*)
+free_filter(void* instance_data, VSCore*, const VSAPI* api)
 {
-    delete reinterpret_cast<AvsReader*>(instance_data);
+    auto d = reinterpret_cast<AvsReader*>(instance_data);
+    d->cleanup(api);
+    delete d;
 }
 
 
