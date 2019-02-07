@@ -149,6 +149,8 @@ write_yuv(VSFrameRef** dsts, PVideoFrame& src, int num_planes,
 
 AvsReader::~AvsReader()
 {
+    clip->~IClip();
+
     if (env) {
         env->DeleteScriptEnvironment();
         env = nullptr;
