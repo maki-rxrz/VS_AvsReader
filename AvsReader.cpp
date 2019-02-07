@@ -30,6 +30,8 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
 #include "myvshelper.h"
 
 
+static int avsr_invoke_count = 0;
+
 const AVS_Linkage* AVS_linkage = nullptr;
 
 
@@ -147,7 +149,6 @@ write_yuv(VSFrameRef** dsts, PVideoFrame& src, int num_planes,
 
 AvsReader::~AvsReader()
 {
-    AVS_linkage = nullptr;
     if (env) {
         env->DeleteScriptEnvironment();
         env = nullptr;
@@ -155,6 +156,11 @@ AvsReader::~AvsReader()
     if (dll) {
         FreeLibrary(dll);
         dll = nullptr;
+    }
+
+    avsr_invoke_count--;
+    if (avsr_invoke_count == 0) {
+        AVS_linkage = nullptr;
     }
 }
 
@@ -282,22 +288,28 @@ create(const char* input, int bit_depth, bool alpha, const char* mode,
 
         int outputs = vi.IsRGB32() && alpha ? 2 : 1;
 
+        avsr_invoke_count++;
+
         return new AvsReader(dll, env, clip, outputs, bit_depth, core, api);
 
     } catch (std::string e) {
-        AVS_linkage = nullptr;
         if (env) {
             env->DeleteScriptEnvironment();
         }
         if (dll) {
             FreeLibrary(dll);
         }
+        if (avsr_invoke_count == 0) {
+            AVS_linkage = nullptr;
+        }
         throw e;
     } catch (AvisynthError e) {
         auto msg = std::string(e.msg);
-        AVS_linkage = nullptr;
         env->DeleteScriptEnvironment();
         FreeLibrary(dll);
+        if (avsr_invoke_count == 0) {
+            AVS_linkage = nullptr;
+        }
         throw msg;
     }
 
